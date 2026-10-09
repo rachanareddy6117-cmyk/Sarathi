@@ -52,6 +52,19 @@ def rows(q, a=()): return [dict(r) for r in db().execute(q, a).fetchall()]
 def run(q, a=()):
     cur = db().execute(q, a); db().commit(); return cur.lastrowid
 
+def json_object():
+    payload = request.get_json(silent=True)
+    return payload if isinstance(payload, dict) else None
+
+def valid_coordinates(lat, lng):
+    try:
+        lat, lng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(lat) or not math.isfinite(lng) or not -90 <= lat <= 90 or not -180 <= lng <= 180:
+        return None
+    return lat, lng
+
 # ---------- helpers ----------
 def hav(a, b, c, d):
     R = 6371000; p1, p2 = math.radians(a), math.radians(c)
@@ -143,15 +156,27 @@ def up(f): return send_from_directory(UPLOADS, f)
 def api_nearby():
     kind = request.args.get("type", "restaurant")
     if kind not in FILTERS: return jsonify(error="bad type"), 400
-    lat, lng = float(request.args["lat"]), float(request.args["lng"])
+    location = valid_coordinates(request.args.get("lat"), request.args.get("lng"))
+    if location is None: return jsonify(error="valid lat and lng are required"), 400
     try:
-        return jsonify(nearby(kind, lat, lng, int(request.args.get("radius", 2000))))
+        radius = int(request.args.get("radius", 2000))
+    except ValueError:
+        return jsonify(error="radius must be an integer"), 400
+    if not 1 <= radius <= 50000: return jsonify(error="radius must be between 1 and 50000 metres"), 400
+    lat, lng = location
+    try:
+        return jsonify(nearby(kind, lat, lng, radius))
     except RuntimeError:
         return jsonify(error="Nearby place providers are unavailable; try again later."), 503
 
 @app.post("/api/incident")
 def api_incident():
-    f = request.form; lat, lng = float(f["lat"]), float(f["lng"]); chosen = f.get("kind", "other")
+    f = request.form
+    location = valid_coordinates(f.get("lat"), f.get("lng"))
+    chosen = f.get("kind", "other")
+    if location is None: return jsonify(error="valid lat and lng are required"), 400
+    if chosen not in RESPONDER: return jsonify(error="invalid incident kind"), 400
+    lat, lng = location
     media, mtype, path = "", "", ""
     file = request.files.get("media")
     if file and file.filename:
@@ -204,7 +229,15 @@ def view_certificate(token):
 
 @app.post("/api/corridor")
 def api_corridor():
-    j = request.get_json(); o, d = j["origin"], j["dest"]
+    j = json_object()
+    if not j: return jsonify(error="a JSON object with origin and dest is required"), 400
+    o, d = j.get("origin"), j.get("dest")
+    if not isinstance(o, dict) or not isinstance(d, dict):
+        return jsonify(error="origin and dest must include lat and lng"), 400
+    origin, destination = valid_coordinates(o.get("lat"), o.get("lng")), valid_coordinates(d.get("lat"), d.get("lng"))
+    if origin is None or destination is None:
+        return jsonify(error="origin and dest must contain valid coordinates"), 400
+    o, d = {"lat": origin[0], "lng": origin[1]}, {"lat": destination[0], "lng": destination[1]}
     try:
         r = requests.get(f"{OSRM}{o['lng']},{o['lat']};{d['lng']},{d['lat']}", params={"overview": "full", "geometries": "geojson", "steps": "true"},
                          headers=HEADERS, timeout=20).json()["routes"][0]
@@ -234,24 +267,66 @@ def end_corridor(cid):
 
 @app.post("/api/fuel")
 def api_fuel():
-    j = request.get_json(); st = nearest("fuel", j["lat"], j["lng"])
+    j = json_object()
+    if not j: return jsonify(error="a JSON object with lat and lng is required"), 400
+    location = valid_coordinates(j.get("lat"), j.get("lng"))
+    if location is None: return jsonify(error="valid lat and lng are required"), 400
+    try:
+        litres = float(j.get("litres", 2))
+    except (TypeError, ValueError):
+        return jsonify(error="litres must be a number"), 400
+    if not math.isfinite(litres) or not 0 < litres <= 200:
+        return jsonify(error="litres must be greater than 0 and at most 200"), 400
+    lat, lng = location
+    st = nearest("fuel", lat, lng)
     fid = run("INSERT INTO fuel_requests(litres,lat,lng,station,status,created) VALUES(?,?,?,?,?,?)",
-              (j.get("litres", 2), j["lat"], j["lng"], st["name"] if st else "", "requested", time.time()))
+              (litres, lat, lng, st["name"] if st else "", "requested", time.time()))
     return jsonify(id=fid, station=st)
 
 @app.post("/api/order")
 def api_order():
-    j = request.get_json(); code = uuid.uuid4().hex[:6].upper()
+    j = json_object()
+    if not j: return jsonify(error="a JSON object is required"), 400
+    restaurant, items = j.get("restaurant"), j.get("items", "")
+    if not isinstance(restaurant, str) or not restaurant.strip() or len(restaurant) > 160:
+        return jsonify(error="restaurant is required and must be at most 160 characters"), 400
+    if not isinstance(items, str) or len(items) > 1000:
+        return jsonify(error="items must be text no longer than 1000 characters"), 400
+    try:
+        eta = int(j.get("eta", 15))
+    except (TypeError, ValueError):
+        return jsonify(error="eta must be an integer"), 400
+    if not 1 <= eta <= 240: return jsonify(error="eta must be between 1 and 240 minutes"), 400
+    location = valid_coordinates(j.get("lat"), j.get("lng"))
+    if (j.get("lat") is not None or j.get("lng") is not None) and location is None:
+        return jsonify(error="lat and lng must both be valid coordinates"), 400
+    lat, lng = location if location is not None else (None, None)
+    code = uuid.uuid4().hex[:6].upper()
     oid = run("INSERT INTO orders(restaurant,items,eta_min,lat,lng,code,status,created) VALUES(?,?,?,?,?,?,?,?)",
-              (j["restaurant"], j["items"], int(j.get("eta", 15)), j.get("lat"), j.get("lng"), code, "preparing", time.time()))
+              (restaurant.strip(), items, eta, lat, lng, code, "preparing", time.time()))
     return jsonify(id=oid, code=code, message=f"Food will be ready in {j.get('eta',15)} min. Show code {code} at the counter.")
 
 @app.route("/api/restroom", methods=["GET", "POST"])
 def api_restroom():
     if request.method == "POST":
-        j = request.get_json()
+        j = json_object()
+        if not j: return jsonify(error="a JSON object is required"), 400
+        place = j.get("place")
+        location = valid_coordinates(j.get("lat"), j.get("lng"))
+        if not isinstance(place, str) or not place.strip() or len(place) > 160:
+            return jsonify(error="place is required and must be at most 160 characters"), 400
+        if location is None: return jsonify(error="valid lat and lng are required"), 400
+        try:
+            clean = int(j.get("clean", 3))
+        except (TypeError, ValueError):
+            return jsonify(error="clean must be an integer from 1 to 5"), 400
+        if not 1 <= clean <= 5: return jsonify(error="clean must be an integer from 1 to 5"), 400
+        comment = j.get("comment", "")
+        if not isinstance(comment, str) or len(comment) > 1000:
+            return jsonify(error="comment must be text no longer than 1000 characters"), 400
+        lat, lng = location
         run("INSERT INTO restroom_reports(place,lat,lng,clean,pads,comment,created) VALUES(?,?,?,?,?,?,?)",
-            (j["place"], j["lat"], j["lng"], int(j.get("clean", 3)), int(bool(j.get("pads"))), j.get("comment", ""), time.time()))
+            (place.strip(), lat, lng, clean, int(bool(j.get("pads"))), comment, time.time()))
         return jsonify(ok=True)
     return jsonify(rows("SELECT * FROM restroom_reports ORDER BY created DESC LIMIT 50"))
 

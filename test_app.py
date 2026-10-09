@@ -38,6 +38,8 @@ class SarathiNineLevelTests(unittest.TestCase):
     def test_level_3_nearby_rejects_unknown_category(self):
         response = self.client.get("/api/nearby?type=unknown&lat=17.3&lng=78.4")
         self.assertEqual(response.status_code, 400)
+        invalid_coordinates = self.client.get("/api/nearby?type=restaurant&lat=bad&lng=78.4")
+        self.assertEqual(invalid_coordinates.status_code, 400)
 
     def test_level_4_nearby_reads_provider_results(self):
         payload = {"elements": [{"type": "node", "lat": 17.3, "lon": 78.4,
@@ -91,6 +93,7 @@ class SarathiNineLevelTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         corridor_id = response.get_json()["id"]
         self.assertEqual(self.client.post(f"/api/corridor/{corridor_id}/end", json={}).status_code, 200)
+        self.assertEqual(self.client.post("/api/corridor", json={}).status_code, 400)
 
     def test_level_7_fuel_request(self):
         station = {"name": "Demo Fuel", "lat": 17.31, "lng": 78.41, "dist": 500}
@@ -98,6 +101,7 @@ class SarathiNineLevelTests(unittest.TestCase):
             response = self.client.post("/api/fuel", json={"lat": 17.3, "lng": 78.4, "litres": 3})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["station"]["name"], "Demo Fuel")
+        self.assertEqual(self.client.post("/api/fuel", json={}).status_code, 400)
 
     def test_level_8_food_order(self):
         response = self.client.post("/api/order", json={
@@ -105,6 +109,7 @@ class SarathiNineLevelTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["code"])
+        self.assertEqual(self.client.post("/api/order", json={}).status_code, 400)
 
     def test_level_9_restroom_feedback_and_history(self):
         saved = self.client.post("/api/restroom", json={
@@ -115,6 +120,7 @@ class SarathiNineLevelTests(unittest.TestCase):
         reports = self.client.get("/api/restroom").get_json()
         self.assertEqual(reports[0]["place"], "Demo Restroom")
         self.assertEqual(self.client.get("/api/history").status_code, 200)
+        self.assertEqual(self.client.post("/api/restroom", json={}).status_code, 400)
 
 
 if __name__ == "__main__":
