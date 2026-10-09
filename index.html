@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sarathi</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="/static/style.css">
+</head><body>
+<header><b>Sarathi</b><span id="mode" class="pill"></span><button id="india-view" title="Show all of India">India</button><button id="locate" title="My location">&#9678;</button></header>
+<div id="map"></div>
+<main id="sheet">
+  <nav>
+    <button data-tab="explore" class="on">Explore</button><button data-tab="report">Report</button>
+    <button data-tab="rescue">Rescue</button><button data-tab="travel">Travel</button>
+  </nav>
+  <section id="explore" class="tab on">
+    <div class="chips" id="chips"></div>
+    <div id="list" class="list"><p class="muted">Pick a category to see places near you.</p></div>
+  </section>
+  <section id="report" class="tab">
+    <h3>Report an incident</h3>
+    <select id="rkind"><option value="accident">Accident</option><option value="fire">Fire</option><option value="medical">Medical</option>
+      <option value="fight">Fight</option><option value="theft">Theft</option><option value="other">Other</option></select>
+    <input id="rnote" placeholder="What happened? (optional)">
+    <input id="rmedia" type="file" accept="image/*,video/*" capture="environment">
+    <button class="primary" id="rsend">Send to nearest responder</button>
+    <div id="rout" class="out"></div>
+    <div id="cert-panel" hidden>
+      <h3>Recognition certificate</h3>
+      <p class="muted">Generate a Sarathi community acknowledgment for submitting this report. This is not a government certificate.</p>
+      <input id="cert-name" autocomplete="name" maxlength="100" placeholder="Your full name">
+      <input id="cert-city" autocomplete="address-level2" maxlength="80" placeholder="City">
+      <button class="primary" id="cert-generate">Generate certificate</button>
+      <div id="cert-out" class="out"></div>
+    </div>
+  </section>
+  <section id="rescue" class="tab">
+    <h3>Emergency green corridor</h3>
+    <select id="vehicle"><option>ambulance</option><option>fire engine</option><option>police</option></select>
+    <p class="muted">Tap the map to set the destination, then start.</p>
+    <div id="dest" class="muted">No destination set</div>
+    <button class="primary" id="cstart">Start corridor</button>
+    <button id="cend" hidden>End corridor</button>
+    <div id="cout" class="out"></div>
+  </section>
+  <section id="travel" class="tab">
+    <div class="travel-tabs" role="tablist" aria-label="Travel services">
+      <button type="button" class="on" id="travel-fuel-tab" role="tab" aria-selected="true" aria-controls="travel-fuel">Fuel</button>
+      <button type="button" id="travel-food-tab" role="tab" aria-selected="false" aria-controls="travel-food">Food</button>
+      <button type="button" id="travel-restroom-tab" role="tab" aria-selected="false" aria-controls="travel-restroom">Restroom</button>
+    </div>
+    <section id="travel-fuel" class="travel-panel on" role="tabpanel" aria-labelledby="travel-fuel-tab">
+      <h3>Fuel request</h3>
+      <div class="row"><input id="litres" type="number" value="3" min="1" aria-label="Fuel litres"><button class="primary" id="fuelbtn">Request fuel</button></div>
+      <div id="fuel-out" class="out"></div>
+    </section>
+    <section id="travel-food" class="travel-panel" role="tabpanel" aria-labelledby="travel-food-tab" hidden>
+      <h3>Food pre-order</h3>
+      <input id="rest" placeholder="Restaurant / cloud kitchen (or tap one in Explore)">
+      <input id="items" placeholder="Items, e.g. 2 veg biryani">
+      <div class="row"><input id="eta" type="number" value="20" min="5" aria-label="Arrival time in minutes"><span class="muted">minutes to arrive</span></div>
+      <button class="primary" id="orderbtn">Place order</button>
+      <div id="food-out" class="out"></div>
+    </section>
+    <section id="travel-restroom" class="travel-panel" role="tabpanel" aria-labelledby="travel-restroom-tab" hidden>
+      <h3>Restroom feedback</h3>
+      <input id="rplace" placeholder="Place name">
+      <select id="clean" aria-label="Restroom cleanliness"><option value="5">Very clean</option><option value="4">Clean</option><option value="3" selected>OK</option><option value="2">Dirty</option><option value="1">Unusable</option></select>
+      <label><input type="checkbox" id="pads"> Sanitary pads available</label>
+      <input id="rcomment" placeholder="Comment for authorities (optional)">
+      <button class="primary" id="rfeed">Submit feedback</button>
+      <div id="restroom-out" class="out"></div>
+    </section>
+  </section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/app.js"></script>
+</body></html>
